@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TubeStats – Live YouTube Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#f0f0f0;color:#222}
+
+header{background:#cc0000;padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:20px;font-weight:bold;color:#fff}
+.search-box{display:flex;gap:8px}
+.search-box input{padding:7px 12px;width:220px;border:none;border-radius:6px;font-size:13px}
+.search-box button{padding:7px 16px;border:none;background:#222;color:#fff;border-radius:6px;font-size:13px;cursor:pointer}
+.search-box button:hover{background:#444}
+.search-box button:disabled{background:#888;cursor:not-allowed}
+
+nav{background:#a80000;display:flex;padding:0 20px}
+nav a{color:rgba(255,255,255,0.7);font-size:13px;padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;text-decoration:none}
+nav a.active{color:#fff;border-bottom:2px solid #fff}
+
+.container{max-width:1200px;margin:auto;padding:18px}
+
+.loading{text-align:center;padding:60px;color:#888;font-size:15px}
+.error{background:#fff0f0;color:#cc0000;padding:16px 20px;border-radius:10px;margin-bottom:14px;font-size:14px}
+
+.banner{background:#fff;padding:16px 20px;border-radius:10px;display:flex;align-items:center;gap:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
+.avatar{width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #ff6666;flex-shrink:0}
+.avatar-placeholder{width:64px;height:64px;border-radius:50%;background:#cc0000;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold;color:#fff;border:3px solid #ff6666;flex-shrink:0}
+.channel-info{flex:1}
+.channel-info h1{font-size:20px;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.verified{width:18px;height:18px;background:#cc0000;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px}
+.channel-info p{font-size:12px;color:#666}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.metric{background:#fff;padding:12px 14px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.metric-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px}
+.metric-val{font-size:22px;font-weight:bold;color:#222}
+.metric-delta{font-size:11px;color:#059669;margin-top:3px}
+
+.main-grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.card{background:#fff;padding:16px 18px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:14px}
+.card:last-child{margin-bottom:0}
+.card-title{font-size:14px;font-weight:bold;margin-bottom:14px;color:#222}
+
+.rank-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
+.rank-row:last-child{border-bottom:none}
+.rank-label{color:#666}
+.rank-val{font-weight:bold;background:#fff0f0;color:#cc0000;padding:2px 10px;border-radius:20px;font-size:12px}
+
+table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+th{text-align:left;padding:7px 10px;color:#888;font-weight:bold;border-bottom:1px solid #f0f0f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px}
+td{padding:10px;border-bottom:1px solid #f0f0f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:bold}
+.pill-red{font-size:11px;background:#fff0f0;color:#a32d2d;padding:2px 8px;border-radius:20px;font-weight:bold}
+.pill-green{font-size:11px;background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:20px;font-weight:bold}
+.pill-muted{font-size:11px;color:#888}
+
+.progress-title{font-size:13px;font-weight:bold;margin-bottom:8px}
+.progress-bar{height:7px;background:#eee;border-radius:20px;overflow:hidden}
+.progress-fill{height:100%;background:#cc0000;border-radius:20px;transition:width 0.5s}
+.progress-meta{display:flex;justify-content:space-between;font-size:11px;color:#888;margin-top:6px}
+
+footer{text-align:center;padding:24px;color:#999;font-size:12px}
+
+@media(max-width:700px){
+  .main-grid{grid-template-columns:1fr}
+  .banner{flex-direction:column;text-align:center}
+  .search-box input{width:130px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TubeStats</div>
+  <div class="search-box">
+    <input type="text" placeholder="Enter @handle or channel name" id="searchInput">
+    <button id="searchBtn" onclick="searchChannel()">Search</button>
+  </div>
+</header>
+
+<nav>
+  <a class="active" href="#">Overview</a>
+  <a href="#">Videos</a>
+  <a href="#">Audience</a>
+  <a href="#">Revenue</a>
+</nav>
+
+<div class="container">
+  <div id="errorBox" class="error" style="display:none"></div>
+  <div id="loadingBox" class="loading">Enter a YouTube channel name or @handle above to get started.</div>
+  <div id="dashboard" style="display:none">
+
+    <div class="banner">
+      <img id="avatarImg" class="avatar" src="" alt="Channel avatar" onerror="this.style.display='none';document.getElementById('avatarFallback').style.display='flex'">
+      <div id="avatarFallback" class="avatar-placeholder" style="display:none">YT</div>
+      <div class="channel-info">
+        <h1 id="channelName">—</h1>
+        <p id="channelMeta">—</p>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Subscribers</div>
+        <div class="metric-val" id="subCount">—</div>
+        <div class="metric-delta">Live data</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total views</div>
+        <div class="metric-val" id="viewCount">—</div>
+        <div class="metric-delta">Live data</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Uploads</div>
+        <div class="metric-val" id="uploadCount">—</div>
+        <div class="metric-delta">Live data</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Est. monthly earnings</div>
+        <div class="metric-val" id="earnings">—</div>
+        <div class="metric-delta">Estimated</div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div>
+        <div class="card">
+          <div class="card-title">Recent videos</div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:44%">Video</th>
+                <th style="width:20%">Views</th>
+                <th style="width:14%">Likes</th>
+                <th style="width:22%">Published</th>
+              </tr>
+            </thead>
+            <tbody id="videoTable"><tr><td colspan="4" style="color:#888;text-align:center">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-title">Channel info</div>
+          <div class="rank-row"><span class="rank-label">Country</span><span class="rank-val" id="country">—</span></div>
+          <div class="rank-row"><span class="rank-label">Created</span><span class="rank-val" id="created">—</span></div>
+          <div class="rank-row"><span class="rank-label">Category</span><span class="rank-val" id="category">—</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Views milestone</div>
+          <div class="progress-title" id="milestoneLabel">Next milestone</div>
+          <div class="progress-bar"><div class="progress-fill" id="milestoneFill" style="width:0%"></div></div>
+          <div class="progress-meta"><span id="milestoneFrom">—</span><span id="milestonePct">—</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>TubeStats &copy; 2026 &nbsp;·&nbsp; Powered by YouTube Data API v3</footer>
+
+<script>
+const API_KEY = 'YOUR_API_KEY';
+
+function formatNum(n) {
+  n = parseInt(n);
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function timeAgo(dateStr) {
+  const diff = (Date.now() - new Date(dateStr)) / 1000;
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff/86400) + 'd ago';
+  if (diff < 2592000) return Math.floor(diff/604800) + 'w ago';
+  return Math.floor(diff/2592000) + 'mo ago';
+}
+
+function estimateEarnings(views) {
+  const monthly = parseInt(views) * 0.000004;
+  return '$' + formatNum(monthly);
+}
+
+function setMilestone(views) {
+  const v = parseInt(views);
+  const milestones = [1e6,10e6,100e6,1e9,10e9,50e9,100e9,500e9,1e12];
+  const next = milestones.find(m => m > v) || v * 2;
+  const prev = milestones[milestones.indexOf(next)-1] || 0;
+  const pct = Math.min(100, Math.round(((v - prev) / (next - prev)) * 100));
+  document.getElementById('milestoneLabel').textContent = formatNum(next) + ' total views';
+  document.getElementById('milestoneFill').style.width = pct + '%';
+  document.getElementById('milestoneFrom').textContent = formatNum(v) + ' current';
+  document.getElementById('milestonePct').textContent = pct + '% done';
+}
+
+async function searchChannel() {
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) return;
+
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loadingBox').textContent = 'Fetching channel data...';
+  document.getElementById('loadingBox').style.display = 'block';
+
+  try {
+    const handle = query.startsWith('@') ? query : '@' + query;
+    let channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&forHandle=${encodeURIComponent(handle)}&key=${API_KEY}`);
+    let channelData = await channelRes.json();
+
+    if (!channelData.items || channelData.items.length === 0) {
+      const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(query)}&maxResults=1&key=${API_KEY}`);
+      const searchData = await searchRes.json();
+      if (!searchData.items || searchData.items.length === 0) throw new Error('Channel not found. Try the exact @handle.');
+      const cid = searchData.items[0].id.channelId;
+      channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&id=${cid}&key=${API_KEY}`);
+      channelData = await channelRes.json();
+    }
+
+    if (!channelData.items || channelData.items.length === 0) throw new Error('Channel not found.');
+
+    const ch = channelData.items[0];
+    const stats = ch.statistics;
+    const snippet = ch.snippet;
+
+    document.getElementById('channelName').textContent = snippet.title;
+    document.getElementById('channelMeta').textContent =
+      (snippet.customUrl || '') + (snippet.country ? ' · ' + snippet.country : '') +
+      ' · Since ' + new Date(snippet.publishedAt).getFullYear();
+    document.getElementById('subCount').textContent = formatNum(stats.subscriberCount || 0);
+    document.getElementById('viewCount').textContent = formatNum(stats.viewCount || 0);
+    document.getElementById('uploadCount').textContent = formatNum(stats.videoCount || 0);
+    document.getElementById('earnings').textContent = estimateEarnings(stats.viewCount || 0);
+    document.getElementById('country').textContent = snippet.country || 'N/A';
+    document.getElementById('created').textContent = new Date(snippet.publishedAt).getFullYear();
+    document.getElementById('category').textContent = snippet.defaultLanguage?.toUpperCase() || 'General';
+
+    const avatarUrl = snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url;
+    if (avatarUrl) {
+      document.getElementById('avatarImg').src = avatarUrl;
+      document.getElementById('avatarImg').style.display = 'block';
+      document.getElementById('avatarFallback').style.display = 'none';
+    } else {
+      document.getElementById('avatarFallback').textContent = snippet.title[0].toUpperCase();
+      document.getElementById('avatarFallback').style.display = 'flex';
+    }
+
+    setMilestone(stats.viewCount || 0);
+
+    const uploadsId = ch.contentDetails?.relatedPlaylists?.uploads;
+    if (uploadsId) {
+      const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsId}&maxResults=5&key=${API_KEY}`);
+      const vidData = await vidRes.json();
+      if (vidData.items && vidData.items.length > 0) {
+        const videoIds = vidData.items.map(v => v.snippet.resourceId.videoId).join(',');
+        const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}&key=${API_KEY}`);
+        const statsData = await statsRes.json();
+        const statsMap = {};
+        (statsData.items || []).forEach(v => statsMap[v.id] = v.statistics);
+
+        const rows = vidData.items.map(v => {
+          const vs = statsMap[v.snippet.resourceId.videoId] || {};
+          return `<tr>
+            <td title="${v.snippet.title}">${v.snippet.title}</td>
+            <td><span class="pill-red">${formatNum(vs.viewCount||0)}</span></td>
+            <td><span class="pill-green">${formatNum(vs.likeCount||0)}</span></td>
+            <td class="pill-muted">${timeAgo(v.snippet.publishedAt)}</td>
+          </tr>`;
+        }).join('');
+        document.getElementById('videoTable').innerHTML = rows;
+      }
+    } else {
+      document.getElementById('videoTable').innerHTML = '<tr><td colspan="4" style="color:#888;text-align:center">No videos found</td></tr>';
+    }
+
+    document.getElementById('loadingBox').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+
+  } catch (err) {
+    document.getElementById('loadingBox').style.display = 'none';
+    document.getElementById('errorBox').textContent = err.message || 'Something went wrong. Check your API key.';
+    document.getElementById('errorBox').style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Search';
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchChannel();
+});
+</script>
+</body>
+</html>
